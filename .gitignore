@@ -1,0 +1,23 @@
+# Flybirds 运行产物
+flybirds_demo/report/
+flybirds_demo/videos/
+flybirds_demo/download/
+flybirds_demo/fonts/
+.screenshots/
+
+# Python
+__pycache__/
+*.pyc
+*.log
+
+# 页面采集与调试产物
+app_page_captures/
+_dump/
+
+# 二进制与数据文件
+*.apk
+*.xlsx
+
+# 系统文件
+.DS_Store
+Thumbs.db
