@@ -10,8 +10,7 @@ __pycache__/
 *.pyc
 *.log
 
-# 页面采集与调试产物
-app_page_captures/
+# 调试产物
 _dump/
 
 # 二进制与数据文件
