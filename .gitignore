@@ -8,6 +8,11 @@ flybirds_demo/fonts/
 # 本地凭据
 local_credentials.env
 
+# 控制台本地数据
+huayi_console/.env
+huayi_console/console.db
+huayi_console/console.db-*
+
 # Python
 __pycache__/
 *.pyc

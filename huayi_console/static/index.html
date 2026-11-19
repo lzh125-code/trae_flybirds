@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>掌上华医刷课控制台</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --panel: #171e26;
+    --panel-2: #1d2732;
+    --line: #2a3644;
+    --text: #e6edf3;
+    --muted: #8b98a5;
+    --green: #3fb950;
+    --yellow: #d29922;
+    --red: #f85149;
+    --blue: #58a6ff;
+    --purple: #bc8cff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.6 "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
+  }
+  header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 22px; border-bottom: 1px solid var(--line); background: var(--panel);
+  }
+  header h1 { font-size: 17px; margin: 0; font-weight: 600; }
+  .pill {
+    padding: 2px 10px; border-radius: 999px; font-size: 12px;
+    border: 1px solid var(--line); color: var(--muted); background: var(--panel-2);
+  }
+  .pill.ok { color: var(--green); border-color: #2c5a34; }
+  .pill.warn { color: var(--yellow); border-color: #5c4a1d; }
+  .pill.err { color: var(--red); border-color: #6a2b28; }
+  .spacer { flex: 1; }
+  main { padding: 18px 22px 40px; max-width: 1180px; margin: 0 auto; }
+  #warnings { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+  .alert {
+    padding: 10px 14px; border-radius: 8px; font-size: 13px;
+    border: 1px solid #6a2b28; background: rgba(248, 81, 73, .12); color: #ffb3ae;
+  }
+  .alert.warning { border-color: #5c4a1d; background: rgba(210, 153, 34, .12); color: #f0c766; }
+  .grid { display: grid; grid-template-columns: 1fr 1.3fr; gap: 14px; margin-bottom: 14px; }
+  @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 16px 18px;
+  }
+  .card h2 { margin: 0 0 12px; font-size: 14px; color: var(--muted); font-weight: 500; letter-spacing: .5px; }
+  .kv { display: grid; grid-template-columns: 92px 1fr; gap: 6px 10px; font-size: 13px; }
+  .kv dt { color: var(--muted); }
+  .kv dd { margin: 0; word-break: break-all; }
+  .mono { font-family: Consolas, "Courier New", monospace; }
+  .progress {
+    height: 10px; border-radius: 999px; background: var(--panel-2);
+    overflow: hidden; margin: 4px 0 8px; border: 1px solid var(--line);
+  }
+  .progress > i {
+    display: block; height: 100%; width: 0;
+    background: linear-gradient(90deg, #1f6feb, #58a6ff); transition: width .4s;
+  }
+  .progress-row { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  button {
+    font: inherit; padding: 7px 16px; border-radius: 7px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--panel-2); color: var(--text);
+  }
+  button:hover:not(:disabled) { border-color: #3d4c5c; background: #23303d; }
+  button:disabled { opacity: .38; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  button.danger { color: #ffb3ae; border-color: #6a2b28; }
+  button.warn { color: #f0c766; border-color: #5c4a1d; }
+  details { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 10px; }
+  summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+  .form-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 8px 12px; margin-top: 10px;
+  }
+  .form-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+  .form-grid input {
+    font: inherit; font-size: 13px; padding: 6px 9px; border-radius: 6px;
+    border: 1px solid var(--line); background: #0f1419; color: var(--text);
+  }
+  .events-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .events-head h2 { margin: 0; }
+  select {
+    font: inherit; font-size: 12px; padding: 5px 8px; border-radius: 6px;
+    border: 1px solid var(--line); background: var(--panel-2); color: var(--text);
+  }
+  #events {
+    height: 340px; overflow-y: auto; font-size: 12.5px;
+    font-family: Consolas, "Microsoft YaHei", monospace;
+    border: 1px solid var(--line); border-radius: 8px; background: #0c1116;
+  }
+  .event { display: flex; gap: 9px; padding: 5px 10px; border-bottom: 1px solid rgba(42, 54, 68, .45); }
+  .event time { color: #5b6b7a; flex: none; }
+  .event .tag {
+    flex: none; width: 48px; text-align: center; border-radius: 4px; font-size: 11px;
+    background: var(--panel-2); color: var(--muted); height: 20px; line-height: 20px;
+  }
+  .event.错误 { background: rgba(248, 81, 73, .07); }
+  .event.错误 .tag { color: var(--red); }
+  .event.进度 .tag { color: var(--blue); }
+  .event.截图 .tag { color: var(--purple); }
+  .event.考试 .tag { color: #f0883e; }
+  .event.恢复 .tag, .event.弹窗 .tag { color: var(--yellow); }
+  .event.系统 .tag { color: var(--green); }
+  .event .msg { color: #c9d5e0; word-break: break-all; }
+  #toast {
+    position: fixed; right: 20px; bottom: 20px; display: flex; flex-direction: column; gap: 8px;
+  }
+  .toast {
+    padding: 9px 14px; border-radius: 8px; font-size: 13px;
+    background: var(--panel-2); border: 1px solid var(--line); box-shadow: 0 6px 20px rgba(0,0,0,.4);
+  }
+  .toast.err { border-color: #6a2b28; color: #ffb3ae; }
+</style>
+</head>
+<body>
+<header>
+  <h1>掌上华医刷课控制台</h1>
+  <span id="guardPill" class="pill">连接中</span>
+  <span id="devicePill" class="pill">设备检查中</span>
+  <span class="spacer"></span>
+  <span id="clock" class="pill mono"></span>
+</header>
+
+<main>
+  <div id="warnings"></div>
+
+  <div class="grid">
+    <section class="card">
+      <h2>设备</h2>
+      <dl class="kv">
+        <dt>连接</dt><dd id="devConn">-</dd>
+        <dt>设备号</dt><dd id="devSerial" class="mono">-</dd>
+        <dt>当前页面</dt><dd id="devActivity" class="mono">-</dd>
+        <dt>最近检查</dt><dd id="devChecked">-</dd>
+      </dl>
+      <div class="controls">
+        <button id="btnRecover" onclick="recover()">强制恢复播放</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>运行</h2>
+      <div class="progress-row">
+        <span id="runLesson">未在运行</span>
+        <span id="runPercent" class="mono">0%</span>
+      </div>
+      <div class="progress"><i id="runBar"></i></div>
+      <div class="progress-row">
+        <span id="runPlayed" class="mono">0 / 0 秒</span>
+        <span id="runSegment" class="mono">分片 -</span>
+      </div>
+      <dl class="kv" style="margin-top:12px">
+        <dt>停滞轮数</dt><dd id="runStalled">-</dd>
+        <dt>已运行</dt><dd id="runUptime">-</dd>
+        <dt>最近输出</dt><dd id="runLast" class="mono">-</dd>
+      </dl>
+      <div class="controls">
+        <button id="btnStart" class="primary" onclick="startGuard()">开始</button>
+        <button id="btnPause" class="warn" onclick="pauseGuard()">暂停</button>
+        <button id="btnResume" onclick="resumeGuard()">继续</button>
+        <button id="btnStop" class="danger" onclick="stopGuard()">停止</button>
+      </div>
+      <details>
+        <summary>启动参数</summary>
+        <div class="form-grid">
+          <label>课件序号<input id="fIndex" type="number" min="0" value="0"></label>
+          <label>课程名<input id="fName" type="text" placeholder="不填用默认名"></label>
+          <label>时长（秒）<input id="fDuration" type="number" min="0" value="0"></label>
+          <label>下一课件名<input id="fNextName" type="text" placeholder="可选"></label>
+          <label>下一课件序号<input id="fNextIndex" type="number" min="0" value="0"></label>
+          <label>项目名<input id="fProject" type="text" placeholder="可选"></label>
+          <label>检查间隔（秒）<input id="fInterval" type="number" min="10" value="60"></label>
+          <label>最长小时<input id="fMaxHours" type="number" min="0.5" step="0.5" value="4"></label>
+        </div>
+      </details>
+    </section>
+  </div>
+
+  <section class="card">
+    <div class="events-head">
+      <h2>事件流</h2>
+      <span class="spacer"></span>
+      <select id="filter" onchange="renderEvents()">
+        <option value="">全部类型</option>
+        <option>进度</option><option>截图</option><option>弹窗</option>
+        <option>恢复</option><option>考试</option><option>错误</option>
+        <option>系统</option><option>日志</option>
+      </select>
+    </div>
+    <div id="events"></div>
+  </section>
+</main>
+
+<div id="toast"></div>
+
+<script>
+let state = null;
+let lastEventId = 0;
+let events = [];
+let stickBottom = true;
+
+const $ = (id) => document.getElementById(id);
+
+function fmtClock(ts) {
+  const d = new Date(ts * 1000);
+  return d.toLocaleTimeString("zh-CN", { hour12: false });
+}
+
+function fmtDuration(seconds) {
+  seconds = Math.max(0, Math.floor(seconds || 0));
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  return (h ? h + " 小时 " : "") + (h || m ? m + " 分 " : "") + s + " 秒";
+}
+
+function toast(text, error) {
+  const box = document.createElement("div");
+  box.className = "toast" + (error ? " err" : "");
+  box.textContent = text;
+  $("toast").appendChild(box);
+  setTimeout(() => box.remove(), 4000);
+}
+
+async function api(path, method) {
+  const response = await fetch(path, { method: method || "GET" });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.detail || ("HTTP " + response.status));
+  return data;
+}
+
+async function refresh() {
+  try {
+    state = await api("/api/status");
+    render();
+  } catch (error) {
+    $("guardPill").className = "pill err";
+    $("guardPill").textContent = "服务异常";
+    $("warnings").innerHTML = '<div class="alert">控制台服务无法连接：' + error.message + "</div>";
+  }
+}
+
+function render() {
+  const guard = state.guard, device = state.device, progress = guard.progress;
+  const pill = $("guardPill");
+  if (!guard.running) {
+    pill.className = "pill";
+    pill.textContent = guard.exit_code === null ? "未运行" : "已停止";
+  } else if (guard.paused) {
+    pill.className = "pill warn";
+    pill.textContent = "已暂停";
+  } else {
+    pill.className = "pill ok";
+    pill.textContent = "播放中";
+  }
+  const dPill = $("devicePill");
+  dPill.className = "pill " + (device.connected ? "ok" : "err");
+  dPill.textContent = device.connected ? "设备在线" : "设备离线";
+
+  $("devConn").innerHTML = device.connected
+    ? '<span style="color:var(--green)">已连接</span>'
+    : '<span style="color:var(--red)">未连接</span>';
+  $("devSerial").textContent = device.serial || "-";
+  $("devActivity").textContent = device.activity || (device.error || "-");
+  $("devChecked").textContent = device.checked_at
+    ? fmtClock(device.checked_at) + (device.age !== null ? "（" + device.age + " 秒前）" : "") : "-";
+
+  $("runLesson").textContent = guard.lesson.name
+    ? "第 " + (guard.lesson.index || "-") + " 课 " + guard.lesson.name : "未在运行";
+  $("runPercent").textContent = progress.percent + "%";
+  $("runBar").style.width = progress.percent + "%";
+  $("runPlayed").textContent = progress.played + " / " + progress.duration + " 秒";
+  $("runSegment").textContent = "分片 " + progress.segment;
+  $("runStalled").textContent = progress.stalled + " 轮";
+  $("runUptime").textContent = guard.running ? fmtDuration(guard.uptime) : "-";
+  $("runLast").textContent = guard.last_output_seconds === null
+    ? "-" : guard.last_output_seconds + " 秒前";
+  if (guard.last_line) $("runLast").title = guard.last_line;
+
+  $("btnStart").disabled = guard.running;
+  $("btnPause").disabled = !guard.running || guard.paused;
+  $("btnResume").disabled = !guard.running || !guard.paused;
+  $("btnStop").disabled = !guard.running;
+
+  $("warnings").innerHTML = (state.warnings || []).map((item) =>
+    '<div class="alert ' + (item.level === "warning" ? "warning" : "") + '">' + item.text + "</div>"
+  ).join("");
+}
+
+function eventRow(item) {
+  const div = document.createElement("div");
+  div.className = "event " + item.kind;
+  const time = document.createElement("time");
+  time.textContent = fmtClock(item.ts);
+  const tag = document.createElement("span");
+  tag.className = "tag";
+  tag.textContent = item.kind;
+  const msg = document.createElement("span");
+  msg.className = "msg";
+  msg.textContent = item.message;
+  div.append(time, tag, msg);
+  return div;
+}
+
+function renderEvents() {
+  const kind = $("filter").value;
+  const list = $("events");
+  list.innerHTML = "";
+  events.filter((item) => !kind || item.kind === kind).forEach((item) => list.appendChild(eventRow(item)));
+  if (stickBottom) list.scrollTop = list.scrollHeight;
+}
+
+function addEvent(item) {
+  if (!item || item.id <= lastEventId) return;
+  lastEventId = item.id;
+  events.push(item);
+  if (events.length > 500) events.shift();
+  const kind = $("filter").value;
+  const list = $("events");
+  if (!kind || item.kind === kind) {
+    list.appendChild(eventRow(item));
+    if (stickBottom) list.scrollTop = list.scrollHeight;
+  }
+}
+
+$("events").addEventListener("scroll", () => {
+  const list = $("events");
+  stickBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 30;
+});
+
+async function loadEvents() {
+  const data = await api("/api/events?tail=true&limit=200");
+  events = data.events;
+  lastEventId = events.length ? events[events.length - 1].id : 0;
+  renderEvents();
+  connectStream();
+}
+
+function connectStream() {
+  const source = new EventSource("/api/events/stream?after=" + lastEventId);
+  source.onmessage = (event) => {
+    try { addEvent(JSON.parse(event.data)); } catch (error) { /* 忽略半包 */ }
+  };
+  source.onerror = () => {
+    source.close();
+    setTimeout(connectStream, 3000);
+  };
+}
+
+async function act(path, method, okText) {
+  try {
+    const data = await api(path, method || "POST");
+    toast(okText || data.message);
+    refresh();
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+function startGuard() {
+  const payload = {
+    lesson_index: Number($("fIndex").value || 0),
+    lesson_name: $("fName").value.trim(),
+    duration: Number($("fDuration").value || 0),
+    next_name: $("fNextName").value.trim(),
+    next_index: Number($("fNextIndex").value || 0),
+    project_name: $("fProject").value.trim(),
+    interval: Number($("fInterval").value || 60),
+    max_hours: Number($("fMaxHours").value || 4),
+  };
+  fetch("/api/guard/start", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  }).then(async (response) => {
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.detail || ("HTTP " + response.status));
+    toast("已启动守护");
+    refresh();
+  }).catch((error) => toast(error.message, true));
+}
+
+const stopGuard = () => act("/api/guard/stop", "POST", "已请求停止");
+const pauseGuard = () => act("/api/guard/pause", "POST", "已暂停");
+const resumeGuard = () => act("/api/guard/resume", "POST", "已继续");
+const recover = () => act("/api/device/recover", "POST");
+
+setInterval(() => { $("clock").textContent = new Date().toLocaleTimeString("zh-CN", { hour12: false }); }, 1000);
+refresh();
+setInterval(refresh, 2000);
+loadEvents();
+</script>
+</body>
+</html>
