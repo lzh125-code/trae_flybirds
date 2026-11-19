@@ -5,6 +5,9 @@ flybirds_demo/download/
 flybirds_demo/fonts/
 .screenshots/
 
+# 本地凭据
+local_credentials.env
+
 # Python
 __pycache__/
 *.pyc
