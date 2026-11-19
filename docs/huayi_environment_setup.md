@@ -15,6 +15,7 @@
 | Python | 3.10.x（本机 3.10.11） | 守护脚本只用标准库 |
 | App | 掌上华医 `com.huayi.cme` | 装好并登录课程账号 |
 | OCR（可选） | easyocr 1.7.2 + torch 2.14.0+cpu + numpy + Pillow | 只有读播放器时间、读截图文案时需要 |
+| 控制台（可选） | fastapi + uvicorn | 只有用 Web 控制台时需要，见 4.6 |
 
 > 注意：`_ocr_image.py` 名字像 PaddleOCR，实际用的是 **easyocr**，首次运行会下载识别模型（约 100MB），需要能联网。
 
@@ -129,6 +130,19 @@ E:\leidian\LDPlayer14\adb.exe -s 127.0.0.1:5555 shell screencap -p /sdcard/a.png
 E:\leidian\LDPlayer14\adb.exe -s 127.0.0.1:5555 pull /sdcard/a.png "$env:TEMP\a.png"
 python flybirds_demo\pscript\_ocr_image.py "$env:TEMP\a.png"
 ```
+
+### 4.6 本地控制台（刷课管理页面）
+
+```powershell
+python -m pip install -r huayi_console\requirements.txt   # fastapi + uvicorn
+Copy-Item huayi_console\.env.example huayi_console\.env   # 按本机改 ADB_PATH / 设备号
+python huayi_console\app.py                               # 浏览器打开 http://127.0.0.1:8765
+```
+
+- 配置只读 `huayi_console/.env`（`ADB_PATH`、`HUAYI_DEVICE`、`CONSOLE_PORT`），改完重启服务生效；系统环境变量优先于该文件。
+- 控制台只把 `huayi_course_guard.py` 当子进程调起，不改变播放判定逻辑；「暂停」= 播放器暂停 + 挂起守护进程，「继续」= 恢复进程 + `keyevent 126`。
+- 配置的设备号不在线、且只连了一台设备时，控制台会自动改用该设备号，并在事件流里提示。
+- 运行数据存 `huayi_console/console.db`（已 gitignore），截图仍落在任务根目录。
 
 ---
 
