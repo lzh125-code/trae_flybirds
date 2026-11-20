@@ -136,7 +136,7 @@ python flybirds_demo\pscript\_ocr_image.py "$env:TEMP\a.png"
 
 ### 4.6 本地控制台（刷课管理页面）
 
-Windows 下可直接双击仓库根目录的 `启动掌上华医控制台.bat`：服务已在运行就直接打开页面；未运行则启动服务窗口，等待就绪后打开浏览器。运行期间不要关闭 `Huayi Console Server` 窗口。首次使用仍需先完成下面的依赖安装与 `.env` 配置。
+Windows 下可直接双击仓库根目录的 `启动掌上华医控制台.bat`：先检查 ADB 设备和 Android 启动状态，模拟器未启动时自动运行 `dnplayer.exe`，等待 `sys.boot_completed=1` 后再打开控制台；服务已在运行时不会重复启动。若 120 秒后设备仍未就绪，会停止并提示检查模拟器与 ADB。运行期间不要关闭 `Huayi Console Server` 窗口。首次使用仍需先完成下面的依赖安装与 `.env` 配置。
 
 ```powershell
 python -m pip install -r huayi_console\requirements.txt   # fastapi + uvicorn
@@ -144,7 +144,7 @@ Copy-Item huayi_console\.env.example huayi_console\.env   # 按本机改 ADB_PAT
 python huayi_console\app.py                               # 浏览器打开 http://127.0.0.1:8765
 ```
 
-- 配置只读 `huayi_console/.env`（`ADB_PATH`、`HUAYI_DEVICE`、`CONSOLE_PORT`），改完重启服务生效；系统环境变量优先于该文件。
+- 配置只读 `huayi_console/.env`（`ADB_PATH`、`EMULATOR_PATH`、`HUAYI_DEVICE`、`CONSOLE_PORT`），改完重启服务生效；系统环境变量优先于该文件。一键启动批处理也会读取其中的 adb 和模拟器路径。
 - 控制台只把 `huayi_course_guard.py` 当子进程调起，不改变播放判定逻辑；「暂停」= 播放器暂停 + 挂起守护进程，「继续」= 恢复进程 + `keyevent 126`。
 - 配置的设备号不在线、且只连了一台设备时，控制台会自动改用该设备号，并在事件流里提示。
 - 运行数据存 `huayi_console/console.db`（已 gitignore），截图仍落在任务根目录。
