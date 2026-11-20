@@ -2,6 +2,157 @@
 
 用于沉淀每天聊天和实践中验证有效的经验，方便后续快速了解项目状态、复用自动化方法并避开已解决的问题。记录以可复用结论为主，不复制完整聊天过程，不记录账号密码等敏感信息。
 
+## 掌上华医刷课：换机安装与运行（2026-11-20）
+
+本节用于在另一台 Windows 机器上恢复「掌上华医」直接刷课环境。当前使用 **Trae + Python + ADB 直接操作模拟器**，不启动 Web 控制台。完整细节见 [掌上华医刷课环境搭建（换机配置手册）](docs/huayi_environment_setup.md)，可复用执行流程见 [掌上华医直接刷课 Skill](.trae/skills/huayi-cme-direct/SKILL.md)。
+
+### 1. 必装软件与依赖
+
+| 项目 | 要求 | 用途与注意事项 |
+| --- | --- | --- |
+| 操作系统 | Windows 10/11 | 以下命令均在 PowerShell 中执行 |
+| Python | 3.10.x，本机验证版本为 3.10.11 | 勾选加入 PATH，安装后确认 `python --version` |
+| Android 模拟器 | 雷电 LDPlayer 14，或其他 Android 7～11 模拟器 | 固定为 **900×1800、DPI 320、竖屏**；脚本点击坐标依赖此配置 |
+| ADB | 使用模拟器自带版本 | 本机路径为 `E:\leidian\LDPlayer14\adb.exe`，换机后按实际路径修改 |
+| 掌上华医 App | 包名 `com.huayi.cme` | 提前安装、登录，并确认能进入「学习 → 继续教育」和课件播放器 |
+
+**直接刷课不需要安装第三方 Python 包。** 以下三个脚本只使用 Python 标准库，也不需要安装 Flybirds、Airtest、Poco，更不需要启动 Web 控制台：
+
+- `flybirds_demo/pscript/huayi_course_guard.py`：视频播放守护、弹窗处理、进度判断、阶段截图和打开考试。
+- `flybirds_demo/pscript/huayi_ui.py`：读取当前页面文字、坐标和选项状态。
+- `flybirds_demo/pscript/huayi_cme_inventory.py`：只读盘点项目与课件状态，输出 CSV。
+
+### 2. 可选依赖（直接模式不用安装）
+
+只有使用旧 Web 控制台时才安装：
+
+```powershell
+python -m pip install -r huayi_console\requirements.txt
+```
+
+依赖为 `fastapi>=0.110,<0.116` 和 `uvicorn>=0.23`。控制台是可选方案，当前直接刷课流程不要启动 `启动掌上华医控制台.bat`。
+
+只有需要用 `_ocr_image.py` 识别截图文字时才安装 OCR；播放守护、界面探针和盘点本身不依赖 OCR：
+
+```powershell
+# 明确安装 CPU 版 torch，避免下载体积更大的 GPU 依赖
+python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+python -m pip install easyocr==1.7.2 numpy pillow
+```
+
+本机 OCR 环境记录为 `easyocr 1.7.2`、`torch 2.14.0+cpu`。首次运行 EasyOCR 还需联网下载约 100 MB 的识别模型。
+
+### 3. 新机器首次配置
+
+1. 将项目复制到新机器，以下命令都从项目根目录执行；不要把本机账号密码写入 README 或提交到 Git。
+2. 安装并启动模拟器，设置 **900×1800、DPI 320、竖屏**，开启 ADB 调试。
+3. 安装并登录掌上华医；首次出现「严正声明」时手动点「我已阅读」。
+4. 修改以下三个脚本顶部的硬编码 ADB 路径，否则换机后会报找不到 `adb.exe`：
+   - `flybirds_demo/pscript/huayi_course_guard.py`
+   - `flybirds_demo/pscript/huayi_ui.py`
+   - `flybirds_demo/pscript/huayi_cme_inventory.py`
+
+```python
+ADB = r"E:\leidian\LDPlayer14\adb.exe"  # 改成新机器上的实际路径
+```
+
+5. 在 PowerShell 验证连接，并按 `adb devices` 的真实输出设置设备号：
+
+```powershell
+Set-Location D:\trae_flybirds  # 改成新机器的项目路径
+$adb = "E:\leidian\LDPlayer14\adb.exe"  # 改成新机器上的实际路径
+& $adb connect 127.0.0.1:5555
+& $adb devices
+
+# 本机当前为 emulator-5554；也可能显示 127.0.0.1:5555，以实际输出为准
+$env:HUAYI_DEVICE = "emulator-5554"
+& $adb -s $env:HUAYI_DEVICE shell getprop sys.boot_completed
+```
+
+`sys.boot_completed` 应返回 `1`。`HUAYI_DEVICE` 只对当前 PowerShell 窗口有效；新开窗口需要重新设置。三个脚本未设置该变量时默认使用 `127.0.0.1:5555`。
+
+6. 先运行界面探针，能输出当前 App 的文字和坐标即表示 Python、ADB 路径及设备号基本可用：
+
+```powershell
+python flybirds_demo\pscript\huayi_ui.py --state
+```
+
+### 4. 直接刷课的使用顺序
+
+#### 4.1 盘点课程（只读，可选）
+
+先把 App 手动停在课程列表页，顶部必须能看到「请输入项目名称」。**盘点会操作 App，与播放守护互斥，不能同时运行。**
+
+```powershell
+New-Item -ItemType Directory -Force "$PWD\app_page_captures\huayi_course" | Out-Null
+python flybirds_demo\pscript\huayi_cme_inventory.py `
+  --screens 12 `
+  --out "$PWD\app_page_captures\huayi_course\inventory.csv" `
+  --lessons-out "$PWD\app_page_captures\huayi_course\inventory_lessons.csv"
+```
+
+不传 `--out` 时默认写入 `d:\trae_flybirds\app_page_captures\huayi_course\inventory.csv`；新机器项目不在该路径时，应像上面一样显式传路径。盘点只读课程信息，不播放、不答题、不选课。
+
+#### 4.2 优先处理待考试课件，再播放视频
+
+启动播放守护前，必须先手动进入目标课件的播放器页并确认视频能播放。同一时刻只运行一个守护，运行期间不要人工同时操作 App，也不要执行课程盘点。
+
+以下是第三课的完整命令示例；换课件时替换序号、课程名、总秒数、已播秒数和项目目录：
+
+```powershell
+$env:HUAYI_DEVICE = "emulator-5554"  # 以 adb devices 输出为准
+python -u flybirds_demo\pscript\huayi_course_guard.py `
+  --lesson-index 3 `
+  --lesson-name "骨质疏松症的中医诊疗" `
+  --duration 2106 `
+  --played 0 `
+  --out-root "$PWD\app_page_captures\huayi_course\tasks\常见骨慢病的诊治及临床实践" `
+  --log "$PWD\app_page_captures\huayi_course\guard.log" `
+  --max-hours 2
+```
+
+参数说明：
+
+- `--duration` 是课件总秒数；`--played` 是进入时的已播秒数，已播不准时脚本会按 TS 分片自校正。
+- `--out-root` 是某个项目的任务根目录，脚本会在其下创建 `<序号>_<课程名>` 子目录。
+- `--max-hours` 是最长运行时间；不传 `--log` 时默认写到 `d:\trae_flybirds\app_page_captures\huayi_course\guard.log`。
+- 日志进度以 logcat **最后一个** `_数字.ts` 分片为准，不能取历史最大分片号；每个分片约 8.57 秒。
+- 守护只负责播放、处理提示弹窗、判断结束、截图和尝试打开考试，**不答题、不交卷、不申请证书**。
+
+### 5. 考试边界与人工核对
+
+- 优先完成已经「待考试」的课件，再继续后续视频；项目页标签只能参考，真实状态以课件进度和考试结果为准。
+- 课件仍显示「学习中」时，点击「考试」可能不会跳转，这通常是学习状态限制，不是模拟器或 ADB 故障。完成视频后才进入考试。
+- 进入 `TestQuestionsActivity` 或出现「交卷 / 答题状态 / 提交」后，播放守护停止点击。此时通过 Trae/ADB 逐题操作，用界面探针读取题干和选项：
+
+```powershell
+python flybirds_demo\pscript\huayi_ui.py --state
+```
+
+- 题目顺序可能随机，必须按题干文本匹配答案，不能直接复用上一次的选项位置。
+- 交卷前逐题核对全部题目均已作答，并用 `--state` 确认目标选项为 `checked="true"` 或 `selected="true"`；交卷后确认页面明确显示「考试通过」。
+- 不自动申请证书，不执行与刷课无关的账号、支付或资料修改操作。
+
+### 6. 日志、截图和盘点结果
+
+- 播放日志：`app_page_captures\huayi_course\guard.log`，或由 `--log` 指定的位置。
+- 每个课件的截图：`app_page_captures\huayi_course\tasks\<项目名>\<序号>_<课程名>\`。
+- 阶段截图包括：开始、中间、结束、考试开始、考试结果；已有截图不覆盖。
+- 项目汇总：`app_page_captures\huayi_course\inventory.csv`。
+- 课件明细：`app_page_captures\huayi_course\inventory_lessons.csv`。
+
+### 7. 明天换机后的自检清单
+
+- [ ] `python --version` 显示 3.10.x。
+- [ ] 模拟器为 900×1800、DPI 320、竖屏，App 已安装并登录。
+- [ ] 三个脚本的 `ADB` 均改为新机器路径，`adb devices` 中设备状态为 `device`。
+- [ ] 当前 PowerShell 的 `HUAYI_DEVICE` 与 `adb devices` 输出一致，`sys.boot_completed=1`。
+- [ ] `huayi_ui.py --state` 能读取当前页面文本和坐标。
+- [ ] 手动进入课件后能正常播放，Activity 为 `MediaPlayNewActivity`。
+- [ ] 守护运行约 2 分钟后，日志中的已播秒数和 TS 分片持续增长，截图目录能正常创建。
+- [ ] 盘点只在课程列表页启动，且没有与播放守护同时运行。
+- [ ] 未完成视频前不强行进入考试；考试后看到「考试通过」才计为完成。
+
 ## 文档先行与执行门禁（强制）
 
 每次任务必须先完成类似产品经理的需求分析，再完成类似架构师的技术设计，核对一致后才能开始实施。不得以聊天记录、口头理解或既有代码代替需求文档和技术设计文档。
