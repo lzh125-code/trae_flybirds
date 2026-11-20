@@ -110,6 +110,27 @@
   .event.恢复 .tag, .event.弹窗 .tag { color: var(--yellow); }
   .event.系统 .tag { color: var(--green); }
   .event .msg { color: #c9d5e0; word-break: break-all; }
+  .table-wrap { max-height: 250px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+  .table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .table th {
+    position: sticky; top: 0; z-index: 1; background: var(--panel-2); color: var(--muted);
+    font-weight: 500; text-align: left; padding: 7px 9px; border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+  }
+  .table td { padding: 6px 9px; border-bottom: 1px solid rgba(42, 54, 68, .45); }
+  .table tr:last-child td { border-bottom: none; }
+  .table button.mini { padding: 2px 7px; font-size: 11.5px; border-radius: 5px; margin-right: 4px; }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 8px; }
+  .st {
+    display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11.5px;
+    border: 1px solid var(--line); color: var(--muted); white-space: nowrap;
+  }
+  .st.playing { color: var(--green); border-color: #2c5a34; }
+  .st.pending_exam { color: var(--yellow); border-color: #5c4a1d; }
+  .st.done { color: var(--blue); border-color: #1f4a7a; }
+  .st.failed { color: var(--red); border-color: #6a2b28; }
+  .st.skipped { color: #6b7784; }
+  .section-gap { margin-bottom: 14px; }
   #toast {
     position: fixed; right: 20px; bottom: 20px; display: flex; flex-direction: column; gap: 8px;
   }
@@ -184,6 +205,56 @@
     </section>
   </div>
 
+  <section class="card section-gap">
+    <div class="events-head">
+      <h2>任务队列</h2>
+      <span id="queueSummary" class="hint" style="margin:0">暂无队列项</span>
+      <span class="spacer"></span>
+      <button id="btnQueueStart" class="primary" onclick="startQueue()" disabled>开始下一项</button>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr>
+          <th>#</th><th>项目 / 课件</th><th>状态</th><th>预计时长</th><th>实际耗时</th><th>说明</th><th>操作</th>
+        </tr></thead>
+        <tbody id="queueBody"><tr><td colspan="7">暂无队列项，请从下方课件盘点勾选入队</td></tr></tbody>
+      </table>
+    </div>
+    <div class="hint">检测到成绩页后自动连播；普通播放结束进入待考试并暂停队列。考试仍需人工处理，不会自动提交证书。</div>
+  </section>
+
+  <section class="card section-gap">
+    <div class="events-head">
+      <h2>课件盘点</h2>
+      <span id="scanInfo" class="hint" style="margin:0">读取本地盘点结果</span>
+      <span class="spacer"></span>
+      <button id="btnScan" onclick="scanInventory()">重新盘点</button>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr>
+          <th>项目名</th><th>项目编号</th><th>学分</th><th>进度</th><th>已完成</th><th>待考试</th><th>播放中</th><th>未学习</th><th>操作</th>
+        </tr></thead>
+        <tbody id="projectBody"><tr><td colspan="9">暂无项目盘点数据</td></tr></tbody>
+      </table>
+    </div>
+    <div class="controls">
+      <select id="projectFilter" onchange="changeProject(this.value)"><option value="-1">全部项目</option></select>
+      <button id="btnAddQueue" class="primary" onclick="addSelected()" disabled>选中课件加入队列</button>
+      <span id="selectedInfo" class="hint" style="margin:auto 0">已选 0 项</span>
+    </div>
+    <div class="table-wrap" style="margin-top:10px">
+      <table class="table">
+        <thead><tr>
+          <th><input id="checkAll" type="checkbox" onchange="toggleAllLessons(this.checked)" aria-label="全选当前课件"></th>
+          <th>项目名</th><th>序号</th><th>课件名</th><th>状态</th>
+        </tr></thead>
+        <tbody id="lessonBody"><tr><td colspan="5">暂无课件明细，请在课程列表页执行盘点</td></tr></tbody>
+      </table>
+    </div>
+    <div class="hint">「待考试」是项目页标签，不可信；以进入课件后的真实进度为准。盘点前请将 App 停在课程列表页，盘点与播放守护不能同时运行。</div>
+  </section>
+
   <section class="card">
     <div class="events-head">
       <h2>事件流</h2>
@@ -191,7 +262,7 @@
       <select id="filter" onchange="renderEvents()">
         <option value="">全部类型</option>
         <option>进度</option><option>截图</option><option>弹窗</option>
-        <option>恢复</option><option>考试</option><option>错误</option>
+        <option>恢复</option><option>考试</option><option>盘点</option><option>错误</option>
         <option>系统</option><option>日志</option>
       </select>
     </div>
@@ -206,6 +277,10 @@ let state = null;
 let lastEventId = 0;
 let events = [];
 let stickBottom = true;
+let queueItems = [];
+let currentQueueId = null;
+let inventory = { projects: [], lessons: [], scan: { running: false } };
+let selectedProject = "";
 
 const $ = (id) => document.getElementById(id);
 
@@ -230,8 +305,13 @@ function toast(text, error) {
   setTimeout(() => box.remove(), 4000);
 }
 
-async function api(path, method) {
-  const response = await fetch(path, { method: method || "GET" });
+async function api(path, method, body) {
+  const options = { method: method || "GET" };
+  if (body !== undefined) {
+    options.headers = { "Content-Type": "application/json" };
+    options.body = JSON.stringify(body);
+  }
+  const response = await fetch(path, options);
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.detail || ("HTTP " + response.status));
   return data;
@@ -293,6 +373,8 @@ function render() {
   $("warnings").innerHTML = (state.warnings || []).map((item) =>
     '<div class="alert ' + (item.level === "warning" ? "warning" : "") + '">' + item.text + "</div>"
   ).join("");
+  $("btnScan").disabled = guard.running || inventory.scan.running;
+  renderQueue();
 }
 
 function eventRow(item) {
@@ -388,6 +470,221 @@ function startGuard() {
   }).catch((error) => toast(error.message, true));
 }
 
+function esc(value) {
+  return String(value === null || value === undefined ? "" : value)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+const queueStatus = {
+  queued: "排队", playing: "播放中", pending_exam: "待考试",
+  done: "已完成", failed: "失败", skipped: "已跳过",
+};
+
+function elapsedSeconds(item) {
+  if (!item.started_at) return 0;
+  const started = new Date(item.started_at.replace(" ", "T")).getTime();
+  if (!Number.isFinite(started)) return 0;
+  const ended = item.ended_at ? new Date(item.ended_at.replace(" ", "T")).getTime() : Date.now();
+  return Number.isFinite(ended) ? Math.max(0, (ended - started) / 1000) : 0;
+}
+
+function renderQueue() {
+  const body = $("queueBody");
+  if (!queueItems.length) {
+    body.innerHTML = '<tr><td colspan="7">暂无队列项，请从下方课件盘点勾选入队</td></tr>';
+  } else {
+    body.innerHTML = queueItems.map((item, index) => {
+      const status = item.status || "queued";
+      const title = (item.project_name ? esc(item.project_name) + "<br>" : "") +
+        "<strong>第 " + esc(item.lesson_index || "-") + " 课 " + esc(item.lesson_name) + "</strong>";
+      const buttons = [];
+      if (status === "queued") {
+        buttons.push('<button class="mini" onclick="moveQueue(' + item.id + ',\'up\')"' + (index === 0 ? " disabled" : "") + ">上移</button>");
+        buttons.push('<button class="mini" onclick="moveQueue(' + item.id + ',\'down\')"' + (index === queueItems.length - 1 ? " disabled" : "") + ">下移</button>");
+        buttons.push('<button class="mini" onclick="queueAction(' + item.id + ',\'skip\')">跳过</button>');
+      }
+      if (status === "pending_exam") {
+        buttons.push('<button class="mini" onclick="queueAction(' + item.id + ',\'complete\')">人工完成</button>');
+      }
+      if (["pending_exam", "failed", "done", "skipped"].includes(status)) {
+        buttons.push('<button class="mini" onclick="queueAction(' + item.id + ',\'retry\')">重试</button>');
+      }
+      if (status !== "playing") {
+        buttons.push('<button class="mini danger" onclick="removeQueueItem(' + item.id + ')">删除</button>');
+      } else {
+        buttons.push('<span class="hint" style="margin:0">请在总览停止</span>');
+      }
+      return "<tr><td>" + (index + 1) + "</td><td>" + title + "</td>" +
+        '<td><span class="st ' + esc(status) + '">' + esc(queueStatus[status] || status) + "</span></td>" +
+        '<td class="mono">' + (item.duration ? fmtDuration(item.duration) : "-") + "</td>" +
+        '<td class="mono">' + (item.started_at ? fmtDuration(elapsedSeconds(item)) : "-") + "</td>" +
+        "<td>" + esc(item.note || "-") + "</td><td>" + buttons.join("") + "</td></tr>";
+    }).join("");
+  }
+  const waiting = queueItems.filter((item) => ["queued", "playing"].includes(item.status));
+  const planned = waiting.reduce((sum, item) => sum + Number(item.duration || 0), 0);
+  const elapsed = queueItems.reduce((sum, item) => sum + elapsedSeconds(item), 0);
+  const queuedCount = queueItems.filter((item) => item.status === "queued").length;
+  $("queueSummary").textContent = "共 " + queueItems.length + " 项｜排队 " + queuedCount +
+    " 项｜待播 " + (planned ? fmtDuration(planned) : "时长未知") + "｜累计耗时 " + fmtDuration(elapsed);
+  $("btnQueueStart").disabled = !queuedCount || Boolean(state && state.guard.running) || inventory.scan.running;
+}
+
+async function loadQueue() {
+  try {
+    const data = await api("/api/queue");
+    queueItems = data.items || [];
+    currentQueueId = data.current;
+    renderQueue();
+  } catch (error) {
+    $("queueSummary").textContent = "队列读取失败：" + error.message;
+  }
+}
+
+async function startQueue() {
+  try {
+    const data = await api("/api/queue/start", "POST");
+    toast(data.message || "已开始下一项");
+    await Promise.all([refresh(), loadQueue()]);
+  } catch (error) { toast(error.message, true); }
+}
+
+async function moveQueue(id, direction) {
+  try {
+    await api("/api/queue/move", "POST", { id, direction });
+    await loadQueue();
+  } catch (error) { toast(error.message, true); }
+}
+
+async function queueAction(id, action) {
+  const labels = { skip: "已跳过", complete: "已确认完成", retry: "已重新排队" };
+  try {
+    const data = await api("/api/queue/" + id + "/" + action, "POST");
+    toast(data.message || labels[action] || "操作完成");
+    await Promise.all([refresh(), loadQueue()]);
+  } catch (error) { toast(error.message, true); }
+}
+
+async function removeQueueItem(id) {
+  if (!window.confirm("确定删除这个队列项？")) return;
+  try {
+    await api("/api/queue/" + id, "DELETE");
+    toast("已删除队列项");
+    await loadQueue();
+  } catch (error) { toast(error.message, true); }
+}
+
+function projectNames() {
+  const names = [];
+  inventory.projects.forEach((item) => { if (item["项目名"] && !names.includes(item["项目名"])) names.push(item["项目名"]); });
+  inventory.lessons.forEach((item) => { if (item["项目名"] && !names.includes(item["项目名"])) names.push(item["项目名"]); });
+  return names;
+}
+
+function lessonStatusClass(status) {
+  if (status === "已完成") return "done";
+  if (status === "待考试") return "pending_exam";
+  if (["播放中", "学习中"].includes(status)) return "playing";
+  return "";
+}
+
+function renderInventory() {
+  const names = projectNames();
+  if (selectedProject && !names.includes(selectedProject)) selectedProject = "";
+  $("projectFilter").innerHTML = '<option value="-1">全部项目</option>' + names.map((name, index) =>
+    '<option value="' + index + '"' + (name === selectedProject ? " selected" : "") + ">" + esc(name) + "</option>"
+  ).join("");
+  $("projectBody").innerHTML = inventory.projects.length ? inventory.projects.map((item) => {
+    const projectIndex = names.indexOf(item["项目名"]);
+    return "<tr><td>" + esc(item["项目名"]) + "</td><td>" + esc(item["项目编号"] || "-") + "</td>" +
+      "<td>" + esc(item["学分"] || "-") + "</td><td>" + esc(item["学习进度"] || "-") + "</td>" +
+      "<td>" + esc(item["已完成"] || 0) + "</td><td>" + esc(item["待考试"] || 0) + "</td>" +
+      "<td>" + esc(item["播放中"] || 0) + "</td><td>" + esc(item["未学习"] || 0) + "</td>" +
+      '<td><button class="mini" onclick="selectProject(' + projectIndex + ')">查看课件</button></td></tr>';
+  }).join("") : '<tr><td colspan="9">暂无项目盘点数据</td></tr>';
+
+  const visible = inventory.lessons.map((item, index) => ({ item, index }))
+    .filter((entry) => !selectedProject || entry.item["项目名"] === selectedProject);
+  $("lessonBody").innerHTML = visible.length ? visible.map(({ item, index }) =>
+    '<tr><td><input class="lesson-check" type="checkbox" value="' + index + '" onchange="updateSelection()" aria-label="选择课件"></td>' +
+    "<td>" + esc(item["项目名"] || "-") + "</td><td>" + esc(item["课件序号"] || "-") + "</td>" +
+    "<td>" + esc(item["课件名"] || "-") + '</td><td><span class="st ' + lessonStatusClass(item["状态"]) + '">' +
+    esc(item["状态"] || "未知") + "</span></td></tr>"
+  ).join("") : '<tr><td colspan="5">暂无课件明细，请在课程列表页执行盘点</td></tr>';
+  $("checkAll").checked = false;
+  $("checkAll").disabled = !visible.length;
+  updateSelection();
+  const scan = inventory.scan || {};
+  $("btnScan").disabled = Boolean(scan.running) || Boolean(state && state.guard.running);
+  $("scanInfo").textContent = scan.running ? "盘点中：" + (scan.last_line || "正在启动") :
+    (scan.error ? "上次盘点失败：" + scan.error :
+      (scan.started_at ? "上次盘点开始于 " + new Date(scan.started_at * 1000).toLocaleString("zh-CN", { hour12: false }) : "读取本地盘点结果"));
+  renderQueue();
+}
+
+async function loadInventory() {
+  try {
+    inventory = await api("/api/inventory");
+    renderInventory();
+  } catch (error) {
+    $("scanInfo").textContent = "盘点读取失败：" + error.message;
+  }
+}
+
+function selectProject(index) {
+  const names = projectNames();
+  selectedProject = names[index] || "";
+  renderInventory();
+}
+
+function changeProject(value) {
+  const index = Number(value);
+  selectedProject = index < 0 ? "" : (projectNames()[index] || "");
+  renderInventory();
+}
+
+function updateSelection() {
+  const checked = document.querySelectorAll(".lesson-check:checked");
+  $("selectedInfo").textContent = "已选 " + checked.length + " 项";
+  $("btnAddQueue").disabled = !checked.length;
+}
+
+function toggleAllLessons(checked) {
+  document.querySelectorAll(".lesson-check").forEach((box) => { box.checked = checked; });
+  updateSelection();
+}
+
+async function addSelected() {
+  const items = Array.from(document.querySelectorAll(".lesson-check:checked")).map((box) => {
+    const lesson = inventory.lessons[Number(box.value)];
+    return {
+      project_name: lesson["项目名"] || "",
+      lesson_index: Number(lesson["课件序号"] || 0),
+      lesson_name: lesson["课件名"] || "",
+      duration: 0,
+    };
+  });
+  if (!items.length) return;
+  try {
+    const data = await api("/api/queue/add", "POST", { items });
+    toast("已加入 " + data.ids.length + " 个课件");
+    document.querySelectorAll(".lesson-check").forEach((box) => { box.checked = false; });
+    $("checkAll").checked = false;
+    updateSelection();
+    await loadQueue();
+  } catch (error) { toast(error.message, true); }
+}
+
+async function scanInventory() {
+  if (!window.confirm("盘点会操作 App 遍历项目。请确认已停在课程列表页，且播放守护已停止。")) return;
+  try {
+    await api("/api/inventory/scan", "POST");
+    toast("已开始盘点");
+    await loadInventory();
+  } catch (error) { toast(error.message, true); }
+}
+
 const stopGuard = () => act("/api/guard/stop", "POST", "已请求停止");
 const pauseGuard = () => act("/api/guard/pause", "POST", "已暂停");
 const resumeGuard = () => act("/api/guard/resume", "POST", "已继续");
@@ -395,7 +692,13 @@ const recover = () => act("/api/device/recover", "POST");
 
 setInterval(() => { $("clock").textContent = new Date().toLocaleTimeString("zh-CN", { hour12: false }); }, 1000);
 refresh();
+loadQueue();
+loadInventory();
 setInterval(refresh, 2000);
+setInterval(() => {
+  loadQueue();
+  if (inventory.scan.running) loadInventory();
+}, 2000);
 loadEvents();
 </script>
 </body>

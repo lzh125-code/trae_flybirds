@@ -63,6 +63,7 @@ class GuardWorker:
         self._last_line = ""
         self._exit_code = None
         self._stopping = False
+        self.on_exit = None  # 队列用它感知守护结束：on_exit(task_id, exit_code, stopped)
 
     # ---------- 对外接口 ----------
     def start(self, params):
@@ -229,6 +230,11 @@ class GuardWorker:
                 update_task(task_id, status=task_status,
                             played=self._progress["played"], segment=self._progress["segment"],
                             ended_at=time.strftime("%Y-%m-%d %H:%M:%S"))
+            if self.on_exit:
+                try:
+                    self.on_exit(task_id, code, self._stopping)
+                except Exception as error:
+                    add_event("队列回调失败：%s" % error, "错误", "error", task_id)
 
     def _parse(self, line):
         match = PROGRESS_RE.search(line)

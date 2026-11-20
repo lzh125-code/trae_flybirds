@@ -112,8 +112,11 @@ python flybirds_demo\pscript\huayi_course_guard.py `
 
 ```powershell
 python flybirds_demo\pscript\huayi_cme_inventory.py --screens 12
-# 输出 app_page_captures\huayi_course\inventory.csv
+# 输出 app_page_captures\huayi_course\inventory.csv          （项目汇总）
+# 输出 app_page_captures\huayi_course\inventory_lessons.csv （课件明细）
 ```
+
+旧版 `inventory.csv` 可以继续展示项目，但只有重新执行盘点后才会生成课件明细。课件状态里的「播放至…」会归一为「播放中」；「待考试」只是项目页标签，不可信，仍以真实播放进度为准。
 
 ### 4.4 界面探针（排障用）
 
@@ -143,6 +146,10 @@ python huayi_console\app.py                               # 浏览器打开 http
 - 控制台只把 `huayi_course_guard.py` 当子进程调起，不改变播放判定逻辑；「暂停」= 播放器暂停 + 挂起守护进程，「继续」= 恢复进程 + `keyevent 126`。
 - 配置的设备号不在线、且只连了一台设备时，控制台会自动改用该设备号，并在事件流里提示。
 - 运行数据存 `huayi_console/console.db`（已 gitignore），截图仍落在任务根目录。
+- **课件盘点**：先将 App 停在课程列表页，再点「重新盘点」。盘点会操作 App 遍历项目，与播放守护互斥；完成后展示项目汇总和课件明细。
+- **任务队列**：在课件明细中勾选并入队，可上移、下移、跳过、重试、删除；「开始下一项」会启动真实播放，操作前先确认设备与课件页面正确。
+- 队列检测到成绩页后会标记完成并连播下一项；普通播放结束会标为「待考试」并暂停队列，等待人工考试或人工确认完成；手动停止会退回排队，异常退出会标为失败并暂停。
+- 队列页显示预计播放时长和实际耗时汇总。盘点明细没有时长时显示「时长未知」，守护仍会从播放器日志自校正；控制台不会自动提交证书。
 
 ---
 

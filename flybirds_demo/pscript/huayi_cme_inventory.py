@@ -106,8 +106,12 @@ def read_detail():
 def main():
     parser = argparse.ArgumentParser(description="盘点 CME 选课项目进度")
     parser.add_argument("--out", default=r"d:\trae_flybirds\app_page_captures\huayi_course\inventory.csv")
+    parser.add_argument("--lessons-out", default="",
+                        help="课件明细 CSV，默认与 --out 同目录的 inventory_lessons.csv")
     parser.add_argument("--screens", type=int, default=12, help="列表最多滚多少屏")
     args = parser.parse_args()
+    lessons_out = args.lessons_out or str(
+        os.path.join(os.path.dirname(args.out), "inventory_lessons.csv"))
 
     xml = dump()
     if "请输入项目名称" not in xml:
@@ -116,6 +120,7 @@ def main():
 
     seen = set()
     rows = []
+    lesson_rows = []
     for screen in range(args.screens):
         xml = dump()
         cards = credit_cards(xml)
@@ -152,6 +157,14 @@ def main():
             })
             print("%s  %s  已完成%s 待考试%s 未学习%s" % (name, progress, rows[-1]["已完成"],
                                                     rows[-1]["待考试"], rows[-1]["未学习"]), flush=True)
+            for title, value in statuses.items():
+                lesson_rows.append({
+                    "项目名": name,
+                    "项目编号": number,
+                    "课件序号": 1 + sum(1 for item in lesson_rows if item["项目名"] == name),
+                    "课件名": title,
+                    "状态": "播放中" if value.startswith("播放至") else value,
+                })
             new_count += 1
         swipe(1500, 600)
         time.sleep(2)
@@ -164,6 +177,13 @@ def main():
     writer.writerows(rows)
     handle.close()
     print("共 %d 个项目，已写入 %s" % (len(rows), args.out))
+
+    with open(lessons_out, "w", newline="", encoding="utf-8-sig") as handle:
+        writer = csv.DictWriter(
+            handle, fieldnames=["项目名", "项目编号", "课件序号", "课件名", "状态"])
+        writer.writeheader()
+        writer.writerows(lesson_rows)
+    print("共 %d 个课件，已写入 %s" % (len(lesson_rows), lessons_out))
     return 0
 
 
