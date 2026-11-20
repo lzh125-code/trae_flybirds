@@ -136,6 +136,8 @@ python flybirds_demo\pscript\_ocr_image.py "$env:TEMP\a.png"
 
 ### 4.6 本地控制台（刷课管理页面）
 
+Windows 下可直接双击仓库根目录的 `启动掌上华医控制台.bat`：服务已在运行就直接打开页面；未运行则启动服务窗口，等待就绪后打开浏览器。运行期间不要关闭 `Huayi Console Server` 窗口。首次使用仍需先完成下面的依赖安装与 `.env` 配置。
+
 ```powershell
 python -m pip install -r huayi_console\requirements.txt   # fastapi + uvicorn
 Copy-Item huayi_console\.env.example huayi_console\.env   # 按本机改 ADB_PATH / 设备号
